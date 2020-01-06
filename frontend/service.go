@@ -107,7 +107,7 @@ func (s *LwdStreamer) GetBlock(ctx context.Context, id *walletrpc.BlockID) (*wal
 		// TODO: Get block by hash
 		return nil, errors.New("GetBlock by Hash is not yet implemented")
 	}
-	cBlock, err := common.GetBlock(s.client, s.cache, int(id.Height))
+	cBlock, err := common.GetBlock(s.client.RawRequest, s.cache, int(id.Height))
 
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (s *LwdStreamer) GetBlockRange(span *walletrpc.BlockRange, resp walletrpc.C
 	blockChan := make(chan walletrpc.CompactBlock)
 	errChan := make(chan error)
 
-	go common.GetBlockRange(s.client, s.cache, blockChan, errChan, int(span.Start.Height), int(span.End.Height))
+	go common.GetBlockRange(s.client.RawRequest, s.cache, blockChan, errChan, int(span.Start.Height), int(span.End.Height))
 
 	for {
 		select {
@@ -206,7 +206,7 @@ func (s *LwdStreamer) GetTransaction(ctx context.Context, txf *walletrpc.TxFilte
 
 // GetLightdInfo gets the LightWalletD (this server) info
 func (s *LwdStreamer) GetLightdInfo(ctx context.Context, in *walletrpc.Empty) (*walletrpc.LightdInfo, error) {
-	saplingHeight, blockHeight, chainName, consensusBranchId := common.GetSaplingInfo(s.client, s.log)
+	saplingHeight, blockHeight, chainName, consensusBranchId := common.GetSaplingInfo(s.client.RawRequest, s.log)
 
 	// TODO these are called Error but they aren't at the moment.
 	// A success will return code 0 and message txhash.

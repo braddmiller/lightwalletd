@@ -7,19 +7,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/zcash-hackworks/lightwalletd/parser"
 	"github.com/zcash-hackworks/lightwalletd/walletrpc"
 )
 
-func GetSaplingInfo(rpcClient *rpcclient.Client, log *logrus.Entry) (int, int, string, string) {
+type RpcFunc func(method string, params []json.RawMessage) (json.RawMessage, error)
+
+func GetSaplingInfo(rf RpcFunc, log *logrus.Entry) (int, int, string, string) {
 	// This request must succeed or we can't go on; give zcashd time to start up
 	var f interface{}
 	retryCount := 0
 	for {
-		result, rpcErr := rpcClient.RawRequest("getblockchaininfo", make([]json.RawMessage, 0))
+		result, rpcErr := rf("getblockchaininfo", make([]json.RawMessage, 0))
 		if rpcErr == nil {
 			if retryCount > 0 {
 				log.Warn("getblockchaininfo RPC successful")
@@ -42,6 +43,10 @@ func GetSaplingInfo(rpcClient *rpcclient.Client, log *logrus.Entry) (int, int, s
 		}).Warn("error with getblockchaininfo rpc, retrying...")
 		time.Sleep(time.Duration(10+retryCount*5) * time.Second) // backoff
 	}
+	return GetInfoFromReply(f)
+}
+
+func GetInfoFromReply(f interface{}) (int, int, string, string) {
 	chainName := f.(map[string]interface{})["chain"].(string)
 
 	upgradeJSON := f.(map[string]interface{})["upgrades"]
@@ -56,11 +61,11 @@ func GetSaplingInfo(rpcClient *rpcclient.Client, log *logrus.Entry) (int, int, s
 	return int(saplingHeight), int(blockHeight), chainName, branchID
 }
 
-func getBlockFromRPC(rpcClient *rpcclient.Client, height int) (*walletrpc.CompactBlock, error) {
+func getBlockFromRPC(rf RpcFunc, height int) (*walletrpc.CompactBlock, error) {
 	params := make([]json.RawMessage, 2)
 	params[0] = json.RawMessage("\"" + strconv.Itoa(height) + "\"")
 	params[1] = json.RawMessage("0")
-	result, rpcErr := rpcClient.RawRequest("getblock", params)
+	result, rpcErr := rf("getblock", params)
 
 	// For some reason, the error responses are not JSON
 	if rpcErr != nil {
@@ -96,14 +101,14 @@ func getBlockFromRPC(rpcClient *rpcclient.Client, height int) (*walletrpc.Compac
 	return block.ToCompact(), nil
 }
 
-func BlockIngestor(rpcClient *rpcclient.Client, cache *BlockCache, log *logrus.Entry, startHeight int) {
+func BlockIngestor(rf RpcFunc, cache *BlockCache, log *logrus.Entry, startHeight int) {
 	reorgCount := 0
 	height := startHeight
 
 	// Start listening for new blocks
 	retryCount := 0
 	for {
-		block, err := getBlockFromRPC(rpcClient, height)
+		block, err := getBlockFromRPC(rf, height)
 		if block == nil || err != nil {
 			if err != nil {
 				log.WithFields(logrus.Fields{
@@ -156,7 +161,7 @@ func BlockIngestor(rpcClient *rpcclient.Client, cache *BlockCache, log *logrus.E
 	}
 }
 
-func GetBlock(rpcClient *rpcclient.Client, cache *BlockCache, height int) (*walletrpc.CompactBlock, error) {
+func GetBlock(rf RpcFunc, cache *BlockCache, height int) (*walletrpc.CompactBlock, error) {
 	// First, check the cache to see if we have the block
 	block := cache.Get(height)
 	if block != nil {
@@ -164,7 +169,7 @@ func GetBlock(rpcClient *rpcclient.Client, cache *BlockCache, height int) (*wall
 	}
 
 	// Not in the cache, ask zcashd
-	block, err := getBlockFromRPC(rpcClient, height)
+	block, err := getBlockFromRPC(rf, height)
 	if err != nil {
 		return nil, err
 	}
@@ -175,12 +180,12 @@ func GetBlock(rpcClient *rpcclient.Client, cache *BlockCache, height int) (*wall
 	return block, nil
 }
 
-func GetBlockRange(rpcClient *rpcclient.Client, cache *BlockCache,
+func GetBlockRange(rf RpcFunc, cache *BlockCache,
 	blockOut chan<- walletrpc.CompactBlock, errOut chan<- error, start, end int) {
 
 	// Go over [start, end] inclusive
 	for i := start; i <= end; i++ {
-		block, err := GetBlock(rpcClient, cache, i)
+		block, err := GetBlock(rf, cache, i)
 		if err != nil {
 			errOut <- err
 			return

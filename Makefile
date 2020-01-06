@@ -27,7 +27,7 @@ show_tests:
 
 # Run unittests
 test:
-	@go test -v -coverprofile=coverage.txt -covermode=atomic ./...
+	@go test -v ./...
 
 # Run data race detector
 race:
@@ -37,9 +37,10 @@ race:
 msan:
 	@go test -v -msan -short ${GO_TEST_FILES}
 
-# Generate global code coverage report
+# Generate global code coverage report (ignore generated files)
 coverage:
-	@go test -coverprofile=coverage.out -covermode=atomic ./...
+	@go test -coverprofile=coverage.out ./...
+	@sed -i '/\.pb\.go/d' coverage.out
 
 # Generate code coverage report
 coverage_report:

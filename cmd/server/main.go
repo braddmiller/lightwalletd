@@ -195,7 +195,7 @@ func main() {
 
 	// Get the sapling activation height from the RPC
 	// (this first RPC also verifies that we can communicate with zcashd)
-	saplingHeight, blockHeight, chainName, branchID := common.GetSaplingInfo(rpcClient, log)
+	saplingHeight, blockHeight, chainName, branchID := common.GetSaplingInfo(rpcClient.RawRequest, log)
 	log.Info("Got sapling height ", saplingHeight, " chain ", chainName, " branchID ", branchID)
 
 	// Initialize the cache
@@ -207,7 +207,7 @@ func main() {
 		cacheStart = saplingHeight
 	}
 
-	go common.BlockIngestor(rpcClient, cache, log, cacheStart)
+	go common.BlockIngestor(rpcClient.RawRequest, cache, log, cacheStart)
 
 	// Compact transaction service initialization
 	service, err := frontend.NewLwdStreamer(rpcClient, cache, log)
